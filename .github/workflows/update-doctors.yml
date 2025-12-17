@@ -1,0 +1,47 @@
+name: Update Doctors Data
+
+on:
+  # Run daily at 6 AM UTC (2 PM Hong Kong time)
+  schedule:
+    - cron: '0 6 * * *'
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  scrape-and-update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+
+      - name: Install dependencies
+        run: |
+          pip install -r scraper/requirements.txt
+
+      - name: Run scraper
+        run: |
+          cd scraper
+          python doctors_scraper.py
+
+      - name: Copy CSV to root
+        run: |
+          cp scraper/doctors.csv doctors.csv
+
+      - name: Commit and push if changed
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add doctors.csv
+          git diff --staged --quiet || git commit -m "Update doctors data $(date +'%Y-%m-%d')"
+          git push
