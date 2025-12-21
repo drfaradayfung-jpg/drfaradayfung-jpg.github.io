@@ -75,6 +75,9 @@
             let current = '';
             let inQuotes = false;
 
+            // Remove carriage returns (handle CRLF line endings)
+            line = line.replace(/\r/g, '');
+
             for (let i = 0; i < line.length; i++) {
                 const char = line[i];
 
