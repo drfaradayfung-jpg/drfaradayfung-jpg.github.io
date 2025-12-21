@@ -73,11 +73,57 @@
         #lang-switcher button:hover:not(.active) {
             background: #f0f0f0;
         }
+
+        #search-container {
+            position: absolute;
+            top: 10px;
+            left: 50px;
+            z-index: 1000;
+        }
+
+        #search-input {
+            width: 250px;
+            padding: 10px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: Arial, sans-serif;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        #search-input:focus {
+            border-color: #4285f4;
+            box-shadow: 0 1px 3px rgba(66,133,244,0.3);
+        }
+
+        #search-input::placeholder {
+            color: #999;
+        }
+
+        #search-count {
+            position: absolute;
+            top: 50px;
+            left: 50px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            color: #666;
+            z-index: 1000;
+            display: none;
+        }
     </style>
 </head>
 
 <body>
     <div id="map"></div>
+    <div id="search-container">
+        <input type="text" id="search-input" placeholder="Search name, address, phone...">
+    </div>
+    <div id="search-count"></div>
     <div id="lang-switcher">
         <button id="btn-en" onclick="switchLanguage('EN')">EN</button>
         <button id="btn-tc" onclick="switchLanguage('TC')">繁中</button>
@@ -89,12 +135,56 @@
         var map = L.map('map').setView([22.28, 114.15], 13);
         var markersLayer = L.layerGroup().addTo(map);
         var currentLang = localStorage.getItem('preferredLang') || 'EN';
+        var allDoctors = []; // Store all doctors for filtering
 
         // Use Google Maps Tiles (Standard Roadmap)
         L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
             maxZoom: 20,
             attribution: '© Google'
         }).addTo(map);
+
+        // Debounce function
+        function debounce(func, wait) {
+            let timeout;
+            return function(...args) {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(this, args), wait);
+            };
+        }
+
+        // Filter doctors based on search query
+        function filterDoctors(query) {
+            if (!query.trim()) {
+                document.getElementById('search-count').style.display = 'none';
+                addMarkers(allDoctors);
+                return;
+            }
+
+            const searchTerm = query.toLowerCase();
+            const filtered = allDoctors.filter(d => {
+                const name = (d.Name || '').toLowerCase();
+                const address = (d.Address || '').toLowerCase();
+                const phone = (d.Phone || '').toLowerCase();
+                return name.includes(searchTerm) ||
+                       address.includes(searchTerm) ||
+                       phone.includes(searchTerm);
+            });
+
+            addMarkers(filtered);
+
+            // Show result count
+            const countEl = document.getElementById('search-count');
+            countEl.textContent = `Found: ${filtered.length} of ${allDoctors.length}`;
+            countEl.style.display = 'block';
+        }
+
+        // Debounced search handler (300ms delay)
+        const handleSearch = debounce(function(e) {
+            filterDoctors(e.target.value);
+        }, 300);
+
+        // Attach search event listener
+        document.getElementById('search-input').addEventListener('input', handleSearch);
 
         // Update language switcher UI
         function updateLangButtons() {
@@ -107,6 +197,8 @@
             currentLang = lang;
             localStorage.setItem('preferredLang', lang);
             updateLangButtons();
+            document.getElementById('search-input').value = '';
+            document.getElementById('search-count').style.display = 'none';
             loadDoctorsData();
         }
 
@@ -227,8 +319,8 @@
                     throw new Error('Failed to load doctors.csv');
                 })
                 .then(({ text, lastModified, usedFallback }) => {
-                    const doctors = parseCSV(text);
-                    addMarkers(doctors);
+                    allDoctors = parseCSV(text);
+                    addMarkers(allDoctors);
 
                     // Display update date
                     let dateStr = '';
@@ -241,7 +333,7 @@
                         });
                         dateStr = 'Data updated: ' + formatted;
                     } else {
-                        dateStr = 'Doctors: ' + doctors.length;
+                        dateStr = 'Doctors: ' + allDoctors.length;
                     }
 
                     if (usedFallback) {
