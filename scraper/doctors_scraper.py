@@ -127,6 +127,12 @@ def parse_html_to_data(html_content):
             continue
         name = name_div.get_text(strip=True)
 
+        # Get the profile link from the anchor tag wrapping the name
+        profile_link = ""
+        name_anchor = name_div.find_parent('a')
+        if name_anchor and name_anchor.get('href'):
+            profile_link = "https://apps.pcdirectory.gov.hk" + name_anchor.get('href')
+
         phone_link = row.find('a', href=lambda x: x and x.startswith('tel:'))
         phone = phone_link.get_text(strip=True) if phone_link else ""
 
@@ -176,6 +182,7 @@ def parse_html_to_data(html_content):
         if name and address:
             data_list.append({
                 'Name': name,
+                'ProfileLink': profile_link,
                 'Description': practice,
                 'Address': address,
                 'Phone': phone,
@@ -192,7 +199,7 @@ def save_to_csv(data_list, output_filename="doctors.csv"):
         print("No data to save")
         return
 
-    fieldnames = ['Name', 'Description', 'Address', 'Phone', 'Lat', 'Lon', 'Programs']
+    fieldnames = ['Name', 'ProfileLink', 'Description', 'Address', 'Phone', 'Lat', 'Lon', 'Programs']
 
     with open(output_filename, 'w', newline='', encoding='utf-8') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)

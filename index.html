@@ -271,8 +271,13 @@
                     // Direct directions link
                     var directionsLink = "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(d.Address);
 
+                    // Make name clickable if profile link exists
+                    var nameHtml = d.ProfileLink
+                        ? "<b><a href='" + d.ProfileLink + "' target='_blank' style='color:#1a0dab;text-decoration:none;'>" + d.Name + "</a></b>"
+                        : "<b>" + d.Name + "</b>";
+
                     marker.bindPopup(
-                        "<b>" + d.Name + "</b><br>" +
+                        nameHtml + "<br>" +
                         (d.Description ? d.Description + "<br>" : "") +
                         d.Address + "<br>" +
                         (d.Phone ? "<a href='tel:" + d.Phone + "'>" + d.Phone + "</a><br>" : "") +
