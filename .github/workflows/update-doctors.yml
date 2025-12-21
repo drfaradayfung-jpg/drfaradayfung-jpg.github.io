@@ -4,8 +4,18 @@ on:
   # Run daily at 6 AM UTC (2 PM Hong Kong time)
   schedule:
     - cron: '0 6 * * *'
-  # Allow manual trigger
+  # Allow manual trigger with language choice
   workflow_dispatch:
+    inputs:
+      language:
+        description: 'Language to scrape'
+        required: false
+        default: 'auto'
+        type: choice
+        options:
+          - auto
+          - EN
+          - TC
 
 jobs:
   scrape-and-update:
@@ -14,6 +24,28 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Determine language to scrape
+        id: lang
+        run: |
+          if [ "${{ github.event.inputs.language }}" = "EN" ]; then
+            echo "lang=EN" >> $GITHUB_OUTPUT
+            echo "csv_file=doctors.csv" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.inputs.language }}" = "TC" ]; then
+            echo "lang=TC" >> $GITHUB_OUTPUT
+            echo "csv_file=doctors_tc.csv" >> $GITHUB_OUTPUT
+          else
+            # Auto mode: alternate based on day of year (even=EN, odd=TC)
+            DAY_OF_YEAR=$(date +%j)
+            if [ $((DAY_OF_YEAR % 2)) -eq 0 ]; then
+              echo "lang=EN" >> $GITHUB_OUTPUT
+              echo "csv_file=doctors.csv" >> $GITHUB_OUTPUT
+            else
+              echo "lang=TC" >> $GITHUB_OUTPUT
+              echo "csv_file=doctors_tc.csv" >> $GITHUB_OUTPUT
+            fi
+          fi
+          echo "Scraping language: $(cat $GITHUB_OUTPUT | grep lang | cut -d= -f2)"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -32,16 +64,17 @@ jobs:
       - name: Run scraper
         run: |
           cd scraper
-          python doctors_scraper.py
+          python doctors_scraper.py --lang ${{ steps.lang.outputs.lang }}
 
       - name: Copy CSV to root
         run: |
-          cp scraper/doctors.csv doctors.csv
+          cp scraper/${{ steps.lang.outputs.csv_file }} ${{ steps.lang.outputs.csv_file }}
 
       - name: Commit and push if changed
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add doctors.csv
-          git diff --staged --quiet || git commit -m "Update doctors data $(date +'%Y-%m-%d')"
+          git add ${{ steps.lang.outputs.csv_file }}
+          LANG_NAME="${{ steps.lang.outputs.lang }}"
+          git diff --staged --quiet || git commit -m "Update doctors data ($LANG_NAME) $(date +'%Y-%m-%d')"
           git push

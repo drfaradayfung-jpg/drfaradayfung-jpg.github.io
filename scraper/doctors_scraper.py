@@ -1,8 +1,10 @@
 """
 Automated scraper for HK Primary Care Directory
 https://apps.pcdirectory.gov.hk/Public/EN/SearchResult
+https://apps.pcdirectory.gov.hk/Public/TC/SearchResult
 
 Runs via GitHub Actions to update doctors.csv automatically
+Supports both English (EN) and Traditional Chinese (TC) versions
 """
 
 from selenium import webdriver
@@ -17,6 +19,7 @@ import csv
 import re
 import time
 import os
+import argparse
 
 # Region button IDs on the page
 REGION_BUTTONS = ["CommandHK", "CommandKLN", "CommandNT"]
@@ -86,12 +89,16 @@ def scrape_region(driver, region_id, base_url, max_retries=3):
                 print(f"  All retries exhausted for {region_id}")
                 return None
 
-def scrape_all_regions():
-    """Scrape doctor data from all regions"""
+def scrape_all_regions(lang="EN"):
+    """Scrape doctor data from all regions
+
+    Args:
+        lang: Language code - "EN" for English or "TC" for Traditional Chinese
+    """
     driver = setup_driver()
     all_html_parts = []
 
-    base_url = "https://apps.pcdirectory.gov.hk/Public/EN/ServiceTypeAdvancedSearch?ProfID=RMP&ServiceType=TaiPoService"
+    base_url = f"https://apps.pcdirectory.gov.hk/Public/{lang}/ServiceTypeAdvancedSearch?ProfID=RMP&ServiceType=TaiPoService"
 
     try:
         for region_id in REGION_BUTTONS:
@@ -195,10 +202,18 @@ def save_to_csv(data_list, output_filename="doctors.csv"):
     print(f"Saved {len(data_list)} records to {output_filename}")
 
 def main():
-    print("Starting HK Primary Care Directory scraper...")
+    parser = argparse.ArgumentParser(description='Scrape HK Primary Care Directory')
+    parser.add_argument('--lang', choices=['EN', 'TC'], default='EN',
+                        help='Language: EN for English, TC for Traditional Chinese')
+    args = parser.parse_args()
+
+    lang = args.lang
+    lang_name = "English" if lang == "EN" else "Traditional Chinese"
+
+    print(f"Starting HK Primary Care Directory scraper ({lang_name})...")
     print("=" * 50)
 
-    html_content = scrape_all_regions()
+    html_content = scrape_all_regions(lang)
 
     if not html_content:
         print("No data scraped!")
@@ -209,7 +224,9 @@ def main():
     print(f"Parsed {len(data_list)} doctor records")
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    csv_file = os.path.join(script_dir, "doctors.csv")
+    # Use doctors.csv for English, doctors_tc.csv for Traditional Chinese
+    csv_filename = "doctors.csv" if lang == "EN" else "doctors_tc.csv"
+    csv_file = os.path.join(script_dir, csv_filename)
     save_to_csv(data_list, csv_file)
 
     print("\nDone!")

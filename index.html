@@ -30,22 +30,85 @@
             z-index: 1000;
             box-shadow: 0 1px 3px rgba(0,0,0,0.2);
         }
+
+        #lang-switcher {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 5px;
+            border-radius: 4px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            z-index: 1000;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            display: flex;
+            gap: 0;
+        }
+
+        #lang-switcher button {
+            padding: 6px 12px;
+            border: 1px solid #ccc;
+            background: #fff;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        #lang-switcher button:first-child {
+            border-radius: 4px 0 0 4px;
+        }
+
+        #lang-switcher button:last-child {
+            border-radius: 0 4px 4px 0;
+            border-left: none;
+        }
+
+        #lang-switcher button.active {
+            background: #4285f4;
+            color: white;
+            border-color: #4285f4;
+        }
+
+        #lang-switcher button:hover:not(.active) {
+            background: #f0f0f0;
+        }
     </style>
 </head>
 
 <body>
     <div id="map"></div>
+    <div id="lang-switcher">
+        <button id="btn-en" onclick="switchLanguage('EN')">EN</button>
+        <button id="btn-tc" onclick="switchLanguage('TC')">繁中</button>
+    </div>
     <div id="update-info">Loading...</div>
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script>
         // Initialize map
         var map = L.map('map').setView([22.28, 114.15], 13);
+        var markersLayer = L.layerGroup().addTo(map);
+        var currentLang = localStorage.getItem('preferredLang') || 'EN';
 
         // Use Google Maps Tiles (Standard Roadmap)
         L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
             maxZoom: 20,
             attribution: '© Google'
         }).addTo(map);
+
+        // Update language switcher UI
+        function updateLangButtons() {
+            document.getElementById('btn-en').classList.toggle('active', currentLang === 'EN');
+            document.getElementById('btn-tc').classList.toggle('active', currentLang === 'TC');
+        }
+
+        // Switch language and reload data
+        function switchLanguage(lang) {
+            currentLang = lang;
+            localStorage.setItem('preferredLang', lang);
+            updateLangButtons();
+            loadDoctorsData();
+        }
 
         // Function to parse CSV text into array of objects
         function parseCSV(text) {
@@ -101,11 +164,13 @@
 
         // Function to add markers to map
         function addMarkers(doctors) {
+            // Clear existing markers
+            markersLayer.clearLayers();
             var bounds = [];
 
             doctors.forEach(function (d) {
                 if (d.Lat && d.Lon) {
-                    var marker = L.marker([d.Lat, d.Lon]).addTo(map);
+                    var marker = L.marker([d.Lat, d.Lon]).addTo(markersLayer);
 
                     // Create a link using address for better Google Maps display
                     var searchQuery = d.Name + ", " + d.Address;
@@ -119,7 +184,7 @@
                         (d.Description ? d.Description + "<br>" : "") +
                         d.Address + "<br>" +
                         (d.Phone ? "<a href='tel:" + d.Phone + "'>" + d.Phone + "</a><br>" : "") +
-                        (d.Programs ? "<small>" + d.Programs + "</small><br>" : "") +
+                        (d.Programs ? "<small>" + d.Programs.split('; ').join('<br>') + "</small><br>" : "") +
                         "<br><a href='" + mapsLink + "' target='_blank' style='color:blue;'>View in Google Maps</a>" +
                         "<br><a href='" + directionsLink + "' target='_blank' style='color:green; font-weight:bold;'>Get Directions</a>"
                     );
@@ -133,39 +198,67 @@
             }
         }
 
-        // Fetch and load the CSV file
-        fetch('doctors.csv')
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Failed to load doctors.csv');
-                }
-                // Get the Last-Modified header
-                const lastModified = response.headers.get('Last-Modified');
-                return response.text().then(text => ({ text, lastModified }));
-            })
-            .then(({ text, lastModified }) => {
-                const doctors = parseCSV(text);
-                addMarkers(doctors);
+        // Fetch and load the CSV file with fallback
+        function loadDoctorsData() {
+            const csvFile = currentLang === 'TC' ? 'doctors_tc.csv' : 'doctors.csv';
+            const updateInfo = document.getElementById('update-info');
+            updateInfo.textContent = 'Loading...';
 
-                // Display update date
-                const updateInfo = document.getElementById('update-info');
-                if (lastModified) {
-                    const date = new Date(lastModified);
-                    const formatted = date.toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
-                    });
-                    updateInfo.textContent = 'Data updated: ' + formatted;
-                } else {
-                    updateInfo.textContent = 'Doctors: ' + doctors.length;
-                }
-            })
-            .catch(error => {
-                console.error('Error loading doctors data:', error);
-                document.getElementById('update-info').textContent = 'Error loading data';
-                alert('Failed to load doctors data. Make sure doctors.csv is in the same directory.');
-            });
+            fetch(csvFile)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('File not found');
+                    }
+                    const lastModified = response.headers.get('Last-Modified');
+                    return response.text().then(text => ({ text, lastModified, usedFallback: false }));
+                })
+                .catch(() => {
+                    // Fallback to English version if TC not found
+                    if (currentLang === 'TC') {
+                        console.log('doctors_tc.csv not found, falling back to doctors.csv');
+                        return fetch('doctors.csv').then(response => {
+                            if (!response.ok) {
+                                throw new Error('Failed to load doctors.csv');
+                            }
+                            const lastModified = response.headers.get('Last-Modified');
+                            return response.text().then(text => ({ text, lastModified, usedFallback: true }));
+                        });
+                    }
+                    throw new Error('Failed to load doctors.csv');
+                })
+                .then(({ text, lastModified, usedFallback }) => {
+                    const doctors = parseCSV(text);
+                    addMarkers(doctors);
+
+                    // Display update date
+                    let dateStr = '';
+                    if (lastModified) {
+                        const date = new Date(lastModified);
+                        const formatted = date.toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                        });
+                        dateStr = 'Data updated: ' + formatted;
+                    } else {
+                        dateStr = 'Doctors: ' + doctors.length;
+                    }
+
+                    if (usedFallback) {
+                        dateStr += ' (EN fallback)';
+                    }
+                    updateInfo.textContent = dateStr;
+                })
+                .catch(error => {
+                    console.error('Error loading doctors data:', error);
+                    updateInfo.textContent = 'Error loading data';
+                    alert('Failed to load doctors data. Make sure doctors.csv is in the same directory.');
+                });
+        }
+
+        // Initialize on page load
+        updateLangButtons();
+        loadDoctorsData();
     </script>
 </body>
 
