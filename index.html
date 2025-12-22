@@ -32,6 +32,10 @@
             font-size: 14px;
         }
 
+        #sidebar-header .toggle-arrow {
+            display: none;
+        }
+
         #sidebar-list {
             flex: 1;
             overflow-y: auto;
@@ -124,16 +128,54 @@
 
         @media (max-width: 768px) {
             body {
-                flex-direction: column-reverse;
+                flex-direction: column;
             }
             #sidebar {
                 width: 100%;
-                height: 200px;
+                height: 35vh;
+                min-height: 150px;
+                max-height: 250px;
                 border-right: none;
                 border-top: 1px solid #ddd;
+                order: 2;
             }
             #map {
-                height: calc(100vh - 200px);
+                flex: 1;
+                height: auto;
+                min-height: 50vh;
+                order: 1;
+            }
+            #lang-switcher {
+                top: auto;
+                bottom: calc(35vh + 10px);
+                right: 10px;
+                padding: 3px;
+            }
+            #lang-switcher button {
+                padding: 4px 8px;
+                font-size: 12px;
+            }
+            #sidebar.collapsed {
+                height: auto;
+                min-height: auto;
+                max-height: none;
+            }
+            #sidebar.collapsed #sidebar-list {
+                display: none;
+            }
+            #sidebar-header {
+                cursor: pointer;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            #sidebar-header .toggle-arrow {
+                display: inline;
+                font-size: 12px;
+                transition: transform 0.2s;
+            }
+            #sidebar.collapsed #sidebar-header .toggle-arrow {
+                transform: rotate(180deg);
             }
         }
 
@@ -246,7 +288,10 @@
 
 <body>
     <div id="sidebar">
-        <div id="sidebar-header">Doctors on screen: 0</div>
+        <div id="sidebar-header" onclick="toggleSidebar()">
+            <span id="sidebar-header-text">Doctors on screen: 0</span>
+            <span class="toggle-arrow">▲</span>
+        </div>
         <ul id="sidebar-list"></ul>
     </div>
     <div id="map"></div>
@@ -269,6 +314,7 @@
         var currentGroups = []; // Store current marker groups
         var markerMap = {}; // Map group index to marker
         var selectedGroupIndex = null; // Currently selected group in sidebar
+        var isNavigating = false; // Flag to prevent sidebar updates during navigation
 
         // Translations
         var i18n = {
@@ -342,12 +388,75 @@
             return html;
         }
 
+        // Navigate to a doctor's marker and open popup
+        function navigateToDoctor(d) {
+            // Find the group containing this doctor
+            for (var i = 0; i < currentGroups.length; i++) {
+                var group = currentGroups[i];
+                for (var j = 0; j < group.doctors.length; j++) {
+                    if (group.doctors[j].Name === d.Name &&
+                        group.doctors[j].Address === d.Address &&
+                        group.doctors[j].Phone === d.Phone) {
+                        var marker = markerMap[i];
+                        if (marker) {
+                            isNavigating = true;
+                            selectedGroupIndex = i;
+
+                            // Highlight sidebar items for this group
+                            var items = document.querySelectorAll('.sidebar-item');
+                            items.forEach(function(item) { item.classList.remove('active'); });
+
+                            var targetZoom = Math.max(map.getZoom(), 15);
+                            var targetLatLng = [group.lat, group.lon];
+
+                            // Check if we're already at the location
+                            var currentCenter = map.getCenter();
+                            var currentZoom = map.getZoom();
+                            var distance = getDistanceMeters(currentCenter.lat, currentCenter.lng, group.lat, group.lon);
+
+                            if (distance < 10 && currentZoom >= targetZoom) {
+                                // Already at location, just open popup
+                                marker.openPopup();
+                                isNavigating = false;
+                            } else {
+                                // Move to location, then open popup
+                                map.once('moveend', function() {
+                                    setTimeout(function() {
+                                        marker.openPopup();
+                                        isNavigating = false;
+                                    }, 50);
+                                });
+                                map.setView(targetLatLng, targetZoom);
+                            }
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+
+        // Toggle sidebar on mobile
+        function toggleSidebar() {
+            if (window.innerWidth <= 768) {
+                var sidebar = document.getElementById('sidebar');
+                sidebar.classList.toggle('collapsed');
+
+                // Update lang-switcher position
+                var langSwitcher = document.getElementById('lang-switcher');
+                if (sidebar.classList.contains('collapsed')) {
+                    langSwitcher.style.bottom = '50px';
+                } else {
+                    langSwitcher.style.bottom = 'calc(35vh + 10px)';
+                }
+            }
+        }
+
         // Update sidebar with doctors
         function updateSidebar(doctors, headerText) {
-            var header = document.getElementById('sidebar-header');
+            var headerTextEl = document.getElementById('sidebar-header-text');
             var list = document.getElementById('sidebar-list');
 
-            header.textContent = headerText || (t('doctorsOnScreen') + ': ' + doctors.length);
+            headerTextEl.textContent = headerText || (t('doctorsOnScreen') + ': ' + doctors.length);
             list.innerHTML = '';
 
             doctors.forEach(function(d, index) {
@@ -355,21 +464,10 @@
                 li.className = 'sidebar-item';
                 li.innerHTML = getDoctorSidebarHtml(d);
 
-                li.onclick = function() {
-                    // Find the group containing this doctor and open its popup
-                    for (var i = 0; i < currentGroups.length; i++) {
-                        var group = currentGroups[i];
-                        for (var j = 0; j < group.doctors.length; j++) {
-                            if (group.doctors[j] === d) {
-                                var marker = markerMap[i];
-                                if (marker) {
-                                    map.setView([group.lat, group.lon], Math.max(map.getZoom(), 15));
-                                    marker.openPopup();
-                                }
-                                return;
-                            }
-                        }
-                    }
+                li.onclick = function(e) {
+                    // Don't navigate if clicking on a link
+                    if (e.target.tagName === 'A') return;
+                    navigateToDoctor(d);
                 };
 
                 list.appendChild(li);
@@ -378,7 +476,7 @@
 
         // Update sidebar with visible doctors on screen
         function updateSidebarWithVisibleDoctors() {
-            if (selectedGroupIndex !== null) return; // Don't update if showing a specific group
+            if (selectedGroupIndex !== null || isNavigating) return; // Don't update if showing a specific group or navigating
 
             var bounds = map.getBounds();
             var visibleDoctors = [];
@@ -412,6 +510,7 @@
         // Reset sidebar to show all visible doctors
         function resetSidebar() {
             selectedGroupIndex = null;
+            isNavigating = false;
             updateSidebarWithVisibleDoctors();
         }
 
