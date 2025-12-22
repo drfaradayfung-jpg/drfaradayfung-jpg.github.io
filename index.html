@@ -292,40 +292,70 @@
             return result;
         }
 
+        // Generate popup HTML for a single doctor
+        function getDoctorPopupHtml(d) {
+            var searchQuery = d.Name + ", " + d.Address;
+            var mapsLink = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(searchQuery);
+            var directionsLink = "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(d.Address);
+
+            var nameHtml = d.ProfileLink
+                ? "<b><a href='" + d.ProfileLink + "' target='_blank' style='color:#1a0dab;text-decoration:none;'>" + d.Name + "</a></b>"
+                : "<b>" + d.Name + "</b>";
+
+            return nameHtml + "<br>" +
+                (d.Description ? d.Description + "<br>" : "") +
+                d.Address + "<br>" +
+                (d.Phone ? "<a href='tel:" + d.Phone + "'>" + d.Phone + "</a><br>" : "") +
+                (d.Programs ? "<small>" + d.Programs.split('; ').join('<br>') + "</small><br>" : "") +
+                "<br><a href='" + mapsLink + "' target='_blank' style='color:blue;'>" + t('viewInMaps') + "</a>" +
+                "<br><a href='" + directionsLink + "' target='_blank' style='color:green; font-weight:bold;'>" + t('getDirections') + "</a>";
+        }
+
         // Function to add markers to map
         function addMarkers(doctors) {
             // Clear existing markers
             markersLayer.clearLayers();
             var bounds = [];
 
+            // Group doctors by location
+            var locationGroups = {};
             doctors.forEach(function (d) {
                 if (d.Lat && d.Lon) {
-                    var marker = L.marker([d.Lat, d.Lon]).addTo(markersLayer);
-
-                    // Create a link using address for better Google Maps display
-                    var searchQuery = d.Name + ", " + d.Address;
-                    var mapsLink = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(searchQuery);
-
-                    // Direct directions link
-                    var directionsLink = "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(d.Address);
-
-                    // Make name clickable if profile link exists
-                    var nameHtml = d.ProfileLink
-                        ? "<b><a href='" + d.ProfileLink + "' target='_blank' style='color:#1a0dab;text-decoration:none;'>" + d.Name + "</a></b>"
-                        : "<b>" + d.Name + "</b>";
-
-                    marker.bindPopup(
-                        nameHtml + "<br>" +
-                        (d.Description ? d.Description + "<br>" : "") +
-                        d.Address + "<br>" +
-                        (d.Phone ? "<a href='tel:" + d.Phone + "'>" + d.Phone + "</a><br>" : "") +
-                        (d.Programs ? "<small>" + d.Programs.split('; ').join('<br>') + "</small><br>" : "") +
-                        "<br><a href='" + mapsLink + "' target='_blank' style='color:blue;'>" + t('viewInMaps') + "</a>" +
-                        "<br><a href='" + directionsLink + "' target='_blank' style='color:green; font-weight:bold;'>" + t('getDirections') + "</a>"
-                    );
-
-                    bounds.push([d.Lat, d.Lon]);
+                    var key = d.Lat + ',' + d.Lon;
+                    if (!locationGroups[key]) {
+                        locationGroups[key] = [];
+                    }
+                    locationGroups[key].push(d);
                 }
+            });
+
+            // Create markers for each location
+            Object.keys(locationGroups).forEach(function (key) {
+                var group = locationGroups[key];
+                var coords = key.split(',');
+                var lat = parseFloat(coords[0]);
+                var lon = parseFloat(coords[1]);
+
+                var marker = L.marker([lat, lon]).addTo(markersLayer);
+                var popupContent;
+
+                if (group.length === 1) {
+                    // Single doctor at this location
+                    popupContent = getDoctorPopupHtml(group[0]);
+                } else {
+                    // Multiple doctors at same location
+                    popupContent = "<div style='max-height:300px;overflow-y:auto;'>";
+                    group.forEach(function (d, index) {
+                        if (index > 0) {
+                            popupContent += "<hr style='margin:10px 0;border:none;border-top:1px solid #ddd;'>";
+                        }
+                        popupContent += getDoctorPopupHtml(d);
+                    });
+                    popupContent += "</div>";
+                }
+
+                marker.bindPopup(popupContent, { maxWidth: 300, maxHeight: 350 });
+                bounds.push([lat, lon]);
             });
 
             if (bounds.length > 0) {
