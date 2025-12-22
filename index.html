@@ -62,15 +62,53 @@
             margin-bottom: 4px;
         }
 
+        .sidebar-item-name a {
+            color: #1a0dab;
+            text-decoration: none;
+        }
+
+        .sidebar-item-name a:hover {
+            text-decoration: underline;
+        }
+
+        .sidebar-item-description {
+            font-size: 12px;
+            color: #333;
+            margin-bottom: 4px;
+        }
+
         .sidebar-item-address {
             font-size: 12px;
             color: #666;
-            margin-bottom: 2px;
+            margin-bottom: 4px;
         }
 
         .sidebar-item-phone {
             font-size: 12px;
             color: #4285f4;
+            margin-bottom: 4px;
+        }
+
+        .sidebar-item-phone a {
+            color: #4285f4;
+            text-decoration: none;
+        }
+
+        .sidebar-item-programs {
+            font-size: 11px;
+            color: #666;
+            margin-bottom: 4px;
+            line-height: 1.4;
+        }
+
+        .sidebar-item-links {
+            font-size: 12px;
+            margin-top: 6px;
+        }
+
+        .sidebar-item-links a {
+            margin-right: 10px;
+            text-decoration: none;
         }
 
         .sidebar-item-count {
@@ -159,8 +197,14 @@
         #search-container {
             position: absolute;
             top: 10px;
-            left: 50px;
+            left: 360px;
             z-index: 1000;
+        }
+
+        @media (max-width: 768px) {
+            #search-container {
+                left: 50px;
+            }
         }
 
         #search-input {
@@ -264,6 +308,40 @@
             return i18n[currentLang][key] || i18n['EN'][key];
         }
 
+        // Generate sidebar item HTML for a single doctor
+        function getDoctorSidebarHtml(d) {
+            var searchQuery = d.Name + ", " + d.Address;
+            var mapsLink = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(searchQuery);
+            var directionsLink = "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(d.Address);
+
+            var nameHtml = d.ProfileLink
+                ? '<a href="' + d.ProfileLink + '" target="_blank" onclick="event.stopPropagation();">' + d.Name + '</a>'
+                : d.Name;
+
+            var html = '<div class="sidebar-item-name">' + nameHtml + '</div>';
+
+            if (d.Description) {
+                html += '<div class="sidebar-item-description">' + d.Description + '</div>';
+            }
+
+            html += '<div class="sidebar-item-address">' + (d.Address || '') + '</div>';
+
+            if (d.Phone) {
+                html += '<div class="sidebar-item-phone"><a href="tel:' + d.Phone + '" onclick="event.stopPropagation();">' + d.Phone + '</a></div>';
+            }
+
+            if (d.Programs) {
+                html += '<div class="sidebar-item-programs">' + d.Programs.split('; ').join('<br>') + '</div>';
+            }
+
+            html += '<div class="sidebar-item-links">' +
+                '<a href="' + mapsLink + '" target="_blank" onclick="event.stopPropagation();" style="color:blue;">' + t('viewInMaps') + '</a>' +
+                '<a href="' + directionsLink + '" target="_blank" onclick="event.stopPropagation();" style="color:green;">' + t('getDirections') + '</a>' +
+                '</div>';
+
+            return html;
+        }
+
         // Update sidebar with doctors
         function updateSidebar(doctors, headerText) {
             var header = document.getElementById('sidebar-header');
@@ -275,10 +353,7 @@
             doctors.forEach(function(d, index) {
                 var li = document.createElement('li');
                 li.className = 'sidebar-item';
-                li.innerHTML =
-                    '<div class="sidebar-item-name">' + (d.Name || '') + '</div>' +
-                    '<div class="sidebar-item-address">' + (d.Address || '') + '</div>' +
-                    (d.Phone ? '<div class="sidebar-item-phone">' + d.Phone + '</div>' : '');
+                li.innerHTML = getDoctorSidebarHtml(d);
 
                 li.onclick = function() {
                     // Find the group containing this doctor and open its popup
