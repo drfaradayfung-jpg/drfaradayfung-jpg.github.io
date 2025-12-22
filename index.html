@@ -759,8 +759,8 @@
                 .then(({ text, lastModified, usedFallback }) => {
                     allDoctors = parseCSV(text);
 
-                    // For TC version, load GPS fallback for doctors missing coordinates
-                    if (currentLang === 'TC' && !usedFallback) {
+                    // Load GPS fallback for doctors missing coordinates
+                    if (!usedFallback) {
                         return fetch('gps_fallback.csv')
                             .then(response => response.ok ? response.text() : '')
                             .then(fallbackText => {
